@@ -40,12 +40,7 @@ server.listen(DefaultConfig.PORT, () => {
 });
 
 // Configure Bot Framework Authentication 
-const botFrameworkAuthentication = new ConfigurationBotFrameworkAuthentication(
-    DefaultConfig.APP_ID, 
-    DefaultConfig.APP_PASSWORD,
-    DefaultConfig.APP_TYPE,
-    DefaultConfig.APP_TENANTID
-);
+const botFrameworkAuthentication = new ConfigurationBotFrameworkAuthentication(process.env);
 
 // Create adapter.
 const adapter = new CloudAdapter(botFrameworkAuthentication);
