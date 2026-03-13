@@ -1,0 +1,27 @@
+{
+  "name": "azurebot-nodejs",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MinHeHeHeHe/AzureBot-NodeJS.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/MinHeHeHeHe/AzureBot-NodeJS/issues"
+  },
+  "homepage": "https://github.com/MinHeHeHeHe/AzureBot-NodeJS#readme",
+  "dependencies": {
+    "botbuilder": "^4.23.3",
+    "dotenv": "^17.3.1",
+    "mssql": "^12.2.0",
+    "restify": "^11.1.0"
+  }
+}
