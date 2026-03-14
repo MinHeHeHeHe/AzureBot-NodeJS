@@ -14,6 +14,7 @@ class DatabaseHelper {
         /** Tạo kết nối đến Azure SQL Database */
         return await sql.connect(this.config);
     }
+    async getConnection() { return this.get_connection(); }
 
     // ─── SUMMARY ───────────────────────────────────────────────────────────────
 
@@ -39,6 +40,7 @@ class DatabaseHelper {
             return {};
         }
     }
+    async getSummaryStats() { return this.get_summary_stats(); }
 
     // ─── COUNTY / CITY / STORE DRILL-DOWN ──────────────────────────────────────
 
@@ -70,6 +72,7 @@ class DatabaseHelper {
             return [];
         }
     }
+    async getCounties(f, t) { return this.get_counties(f, t); }
 
     async get_cities_by_county(county, from_date = null, to_date = null) {
         /** Lấy danh sách thành phố trong một county */
@@ -100,6 +103,7 @@ class DatabaseHelper {
             return [];
         }
     }
+    async getCitiesByCounty(c, f, t) { return this.get_cities_by_county(c, f, t); }
 
     async get_stores_by_city(city, county, from_date = null, to_date = null) {
         /** Lấy danh sách cửa hàng trong một city */
@@ -135,6 +139,7 @@ class DatabaseHelper {
             return [];
         }
     }
+    async getStoresByCity(ci, co, f, t) { return this.get_stores_by_city(ci, co, f, t); }
 
     async get_revenue_by_store(store_id, from_date = null, to_date = null) {
         /** Tổng doanh thu của một cửa hàng */
@@ -175,6 +180,7 @@ class DatabaseHelper {
             return {};
         }
     }
+    async getRevenueByStore(s, f, t) { return this.get_revenue_by_store(s, f, t); }
 
     async get_revenue_by_county(county, from_date = null, to_date = null) {
         /** Tổng doanh thu của một county */
@@ -214,6 +220,7 @@ class DatabaseHelper {
             return {};
         }
     }
+    async getRevenueByCounty(c, f, t) { return this.get_revenue_by_county(c, f, t); }
 
     // ─── PRODUCT RANKINGS ──────────────────────────────────────────────────────
 
@@ -251,6 +258,7 @@ class DatabaseHelper {
             return [];
         }
     }
+    async getTopProducts(l, f, t) { return this.get_top_products(l, f, t); }
 
     async get_bottom_products(limit = 5, from_date = null, to_date = null) {
         /** Top N sản phẩm bán ít nhất (theo bottles_sold), nếu bằng số chai thì lọc doanh thu thấp -> cao */
@@ -286,6 +294,7 @@ class DatabaseHelper {
             return [];
         }
     }
+    async getBottomProducts(l, f, t) { return this.get_bottom_products(l, f, t); }
 }
 
 module.exports = DatabaseHelper;
