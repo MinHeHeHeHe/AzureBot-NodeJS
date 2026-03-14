@@ -4,13 +4,13 @@ class DefaultConfig {
     static PORT = process.env.PORT || 3978;
     static MicrosoftAppId = process.env.MicrosoftAppId || "";
     static MicrosoftAppPassword = process.env.MicrosoftAppPassword || "";
-    static MicrosoftAppType = process.env.MicrosoftAppType || "MultiTenant";
+    static MicrosoftAppType = process.env.MicrosoftAppType || "SingleTenant";
     static MicrosoftAppTenantId = process.env.MicrosoftAppTenantId || "";
 
     // Keep original names just in case they are used elsewhere
     static APP_ID = process.env.MicrosoftAppId || "";
     static APP_PASSWORD = process.env.MicrosoftAppPassword || "";
-    static APP_TYPE_OLD = process.env.MicrosoftAppType || "MultiTenant";
+    static APP_TYPE_OLD = process.env.MicrosoftAppType || "SingleTenant";
     static APP_TENANTID_OLD = process.env.MicrosoftAppTenantId || "";
 
     // Azure SQL Database Configuration
