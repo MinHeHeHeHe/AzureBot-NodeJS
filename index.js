@@ -1,61 +1,82 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 const restify = require('restify');
 const {
     CloudAdapter,
     ConfigurationBotFrameworkAuthentication,
     MemoryStorage,
     ConversationState,
-    UserState
+    UserState,
+    ActivityTypes
 } = require('botbuilder');
+
 const { Bot } = require('./bots/bot');
 const DefaultConfig = require('./config');
 
+const CONFIG = DefaultConfig;
+
+// Create adapter.
+// See https://aka.ms/about-bot-adapter to learn more about how bots work.
+const ADAPTER = new CloudAdapter(new ConfigurationBotFrameworkAuthentication(CONFIG));
+
 // Catch-all for errors.
-const onTurnErrorHandler = async (context, error) => {
+async function on_error(context, error) {
     // This check writes out errors to console log .vs. app insights.
     // NOTE: In production environment, you should consider logging this to Azure
     //       application insights.
-    console.error(`\n [onTurnError] unhandled error: ${ error }`);
-
-    // Send a trace activity, which will be displayed in Bot Framework Emulator
-    await context.sendTraceActivity(
-        'OnTurnError Trace',
-        `${ error }`,
-        'https://www.botframework.com/schemas/error',
-        'TurnError'
-    );
+    console.error(`\n [on_turn_error] unhandled error: ${error}`);
+    console.error(error);
 
     // Send a message to the user
-    await context.sendActivity('The bot encountered an error or bug.');
-    await context.sendActivity('To continue to run this bot, please fix the bot source code.');
-};
+    await context.sendActivity("The bot encountered an error or bug.");
+    await context.sendActivity(
+        "To continue to run this bot, please fix the bot source code."
+    );
+
+    // Send a trace activity if we're talking to the Bot Framework Emulator
+    if (context.activity.channelId === 'emulator') {
+        // Create a trace activity that contains the error object
+        const trace_activity = {
+            type: ActivityTypes.Trace,
+            timestamp: new Date(),
+            name: 'on_turn_error Trace',
+            label: 'TurnError',
+            value: `${error}`,
+            valueType: 'https://www.botframework.com/schemas/error'
+        };
+        // Send a trace activity, which will be displayed in Bot Framework Emulator
+        await context.sendActivity(trace_activity);
+    }
+}
+
+ADAPTER.onTurnError = on_error;
+
+// Create MemoryStorage and State
+const MEMORY = new MemoryStorage();
+const CONVERSATION_STATE = new ConversationState(MEMORY);
+const USER_STATE = new UserState(MEMORY);
+
+// Create the Bot
+const BOT = new Bot(CONVERSATION_STATE, USER_STATE);
 
 // Create HTTP server
-const server = restify.createServer();
-server.use(restify.plugins.bodyParser());
+const app = restify.createServer();
+app.use(restify.plugins.bodyParser());
 
-server.listen(DefaultConfig.PORT, () => {
-    console.log(`\n${ server.name } listening to ${ server.url }`);
-    console.log('\nGet Bot Framework Emulator: https://aka.ms/botframework-emulator');
-    console.log('\nTo talk to your bot, open the emulator select "Open Bot"');
-});
+// Listen for incoming requests on /api/messages
+async function messages(req, res) {
+    await ADAPTER.process(req, res, (context) => BOT.run(context));
+}
 
-// Configure Bot Framework Authentication 
-const botFrameworkAuthentication = new ConfigurationBotFrameworkAuthentication(process.env);
+app.post('/api/messages', messages);
 
-// Create adapter.
-const adapter = new CloudAdapter(botFrameworkAuthentication);
-adapter.onTurnError = onTurnErrorHandler;
-
-// Define Memory Storage and State
-const memoryStorage = new MemoryStorage();
-const conversationState = new ConversationState(memoryStorage);
-const userState = new UserState(memoryStorage);
-
-// Create the main dialog.
-const myBot = new Bot(conversationState, userState);
-
-// Listen for incoming requests.
-server.post('/api/messages', async (req, res) => {
-    // Route received a request to adapter for processing
-    await adapter.process(req, res, (context) => myBot.run(context));
-});
+if (require.main === module) {
+    try {
+        app.listen(CONFIG.PORT, () => {
+             console.log(`\n${app.name} listening to ${app.url}`);
+        });
+    } catch (error) {
+        throw error;
+    }
+}

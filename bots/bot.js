@@ -1,7 +1,39 @@
-const { ActivityHandler, MessageFactory, TurnContext } = require('botbuilder');
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
+const { ActivityHandler, TurnContext } = require('botbuilder');
 const DatabaseHelper = require('../database/dbHelper');
 
-// Helper formatting functions
+// ─── CONVERSATION STATES ────────────────────────────────────────────────────
+const STATE_MAIN_MENU         = "MAIN_MENU";
+const STATE_DATE_FROM         = "DATE_FROM";          // chờ nhập ngày bắt đầu
+const STATE_DATE_TO           = "DATE_TO";            // chờ nhập ngày kết thúc
+const STATE_COUNTY_LIST       = "COUNTY_LIST";        // hiện list county
+const STATE_CITY_LIST         = "CITY_LIST";          // hiện list city của county đã chọn
+const STATE_STORE_LIST        = "STORE_LIST";         // hiện list store của city đã chọn
+const STATE_END_RESULT        = "END_RESULT";         // hiện kết quả cuối cùng, chờ gõ Menu
+
+const MONTH_NAMES = {
+    1: "Tháng 1", 2: "Tháng 2", 3: "Tháng 3",
+    4: "Tháng 4", 5: "Tháng 5", 6: "Tháng 6",
+    7: "Tháng 7", 8: "Tháng 8", 9: "Tháng 9",
+    10: "Tháng 10", 11: "Tháng 11", 12: "Tháng 12",
+};
+
+function getDaysInMonth(year, month) {
+    return new Date(year, month, 0).getDate();
+}
+
+function _fmt_date_range(from_date, to_date) {
+    // Chuỗi mô tả khoảng thời gian (dạng YYYY-MM-DD)
+    if (from_date || to_date) {
+        const f = from_date ? from_date.substring(0, 7) : "đầu năm";
+        const t = to_date ? to_date.substring(0, 7) : "cuối năm";
+        return ` (từ ${f} đến ${t})`;
+    }
+    return " (toàn năm 2022)";
+}
+
 function formatCurrency(amount) {
     if (typeof amount !== 'number') amount = parseFloat(amount);
     if (isNaN(amount)) return "0.00";
@@ -17,158 +49,405 @@ function formatNumber(amount) {
 class Bot extends ActivityHandler {
     constructor(conversationState, userState) {
         super();
-        if (!conversationState) throw new Error('[Bot]: Missing parameter. conversationState is required');
-        if (!userState) throw new Error('[Bot]: Missing parameter. userState is required');
-
         this.conversationState = conversationState;
         this.userState = userState;
         this.dbHelper = new DatabaseHelper();
+        this.convAccessor = this.conversationState.createProperty("ConvData");
 
-        // Tạo state property accessors
-        this.conversationDataAccessor = this.conversationState.createProperty('ConversationData');
-        this.userDataAccessor = this.userState.createProperty('UserData');
-
+        // ─── WELCOME ─────────────────────────────────────────────────────────────
         this.onMembersAdded(async (context, next) => {
             const membersAdded = context.activity.membersAdded;
-            for (let cnt = 0; cnt < membersAdded.length; ++cnt) {
-                if (membersAdded[cnt].id !== context.activity.recipient.id) {
-                    await context.sendActivity(
-                        "🤖 Xin chào! Tôi là Automation Bot.\n\n" +
-                        "Vui lòng cho biết role của bạn:\n" +
-                        "- Gõ **Admin** nếu bạn là quản trị viên\n" +
-                        "- Gõ **User** nếu bạn là nhân viên"
-                    );
+            for (let member of membersAdded) {
+                if (member.id !== context.activity.recipient.id) {
+                    const conv = await this.convAccessor.get(context, {});
+                    for (let key in conv) delete conv[key];
+                    conv.state = STATE_MAIN_MENU;
+                    await this.convAccessor.set(context, conv);
+                    await context.sendActivity(this._main_menu_message());
                 }
             }
-            // By calling next() you ensure that the next BotHandler is run.
             await next();
         });
 
+        // ─── MESSAGE HANDLER ─────────────────────────────────────────────────────
         this.onMessage(async (context, next) => {
-            // Lấy conversation data
-            const conversationData = await this.conversationDataAccessor.get(context, {});
-            
-            const userInput = context.activity.text ? context.activity.text.trim() : "";
-            
-            // ============ CHỌN ROLE ============
-            if (!conversationData.role) {
-                if (userInput.toLowerCase() === "admin") {
-                    conversationData.role = "admin";
-                    conversationData.step = "admin_menu";
-                    
-                    // Hiển thị thống kê nhanh cho Admin
-                    const stats = await this.dbHelper.getSummaryStats();
-                    let message = "📊 **BÁO CÁO TỔNG QUAN (ADMIN)**\n\n";
-                    message += `💰 Tổng doanh thu: **$${formatCurrency(stats.total_revenue)}**\n`;
-                    message += `🍾 Tổng số chai bán: **${formatNumber(stats.total_bottles)}**\n`;
-                    message += `🏠 Số cửa hàng ghi nhận: **${formatNumber(stats.total_stores)}**\n\n`;
-                    message += "Chọn chức năng:\n";
-                    message += "- Gõ **Top** để xem Top 5 sản phẩm bán chạy\n";
-                    message += "- Gõ **Exit** để thoát";
-                    
-                    await context.sendActivity(message);
-                    
-                } else if (userInput.toLowerCase() === "user") {
-                    conversationData.role = "user";
-                    conversationData.step = "user_menu";
-                    await context.sendActivity(
-                        "🔍 **HỆ THỐNG TRA CỨU DOANH SỐ RƯỢU IOWA**\n\n" +
-                        "Dữ liệu sẵn sàng! Bạn có thể:\n" +
-                        "1️⃣ Gõ **Store [ID]** để tra cứu theo cửa hàng (VD: Store 2501)\n" +
-                        "2️⃣ Gõ **City [Tên]** để tra cứu theo thành phố (VD: City Ames)\n" +
-                        "3️⃣ Gõ **Exit** để kết thúc"
-                    );
-                } else {
-                    await context.sendActivity(
-                        "❌ Vui lòng chọn Role để tiếp tục:\n" +
-                        "- **Admin** (Xem báo cáo tổng)\n" +
-                        "- **User** (Tra cứu chi tiết)"
-                    );
+            const text = context.activity.text ? context.activity.text.trim() : "";
+            const text_lower = text.toLowerCase();
+
+            // Lệnh reset về menu — chấp nhận "menu" hoặc "Menu"
+            if (text_lower === "menu") {
+                const conv = await this.convAccessor.get(context, {});
+                for (let key in conv) delete conv[key];
+                conv.state = STATE_MAIN_MENU;
+                await this.convAccessor.set(context, conv);
+                await context.sendActivity(this._main_menu_message());
+            } else {
+                const conv = await this.convAccessor.get(context, {});
+                if (!conv.state) {
+                    conv.state = STATE_MAIN_MENU;
                 }
+                await this._dispatch(context, conv, text, text_lower);
             }
+
+            await this.conversationState.saveChanges(context);
+            await this.userState.saveChanges(context);
             
-            // ============ ADMIN FLOW ============
-            else if (conversationData.role === "admin") {
-                const userInputLower = userInput.toLowerCase();
-                
-                if (userInputLower === "top") {
-                    const products = await this.dbHelper.getTopProducts();
-                    let message = "🏆 **TOP 5 SẢN PHẨM DOANH THU CAO NHẤT:**\n\n";
-                    products.forEach((p, i) => {
-                        message += `${i + 1}. ${p.name}: **$${formatCurrency(p.revenue)}**\n`;
-                    });
-                    await context.sendActivity(message);
-                }
-                else if (userInputLower === "exit") {
-                    await context.sendActivity("👋 Đã thoát phiên Admin.");
-                    Reflect.deleteProperty(conversationData, 'role');
-                    Reflect.deleteProperty(conversationData, 'step');
-                } else {
-                    await context.sendActivity("Lệnh không hợp lệ. Gõ **Top** hoặc **Exit**.");
-                }
-            }
-            
-            // ============ USER FLOW ============
-            else if (conversationData.role === "user") {
-                const userInputLower = userInput.toLowerCase();
-                
-                // Tra cứu theo Store
-                if (userInputLower.startsWith("store ")) {
-                    const storeId = userInput.split(" ")[1];
-                    const sales = await this.dbHelper.getSalesByStore(storeId);
-                    const message = this._formatSalesResults(sales, `Cửa hàng #${storeId}`);
-                    await context.sendActivity(message);
-                }
-                
-                // Tra cứu theo City
-                else if (userInputLower.startsWith("city ")) {
-                    const cityName = userInput.split(" ").slice(1).join(" ");
-                    const sales = await this.dbHelper.getSalesByCity(cityName);
-                    const message = this._formatSalesResults(sales, `Thành phố ${cityName}`);
-                    await context.sendActivity(message);
-                }
-                
-                else if (userInputLower === "exit") {
-                    await context.sendActivity("👋 Cảm ơn bạn đã sử dụng hệ thống tra cứu!");
-                    Reflect.deleteProperty(conversationData, 'role');
-                    Reflect.deleteProperty(conversationData, 'step');
-                } else {
-                    await context.sendActivity(
-                        "❌ Vui lòng gõ đúng định dạng:\n" +
-                        "- **Store [ID]** (VD: Store 2501)\n" +
-                        "- **City [Tên]** (VD: City Ames)\n" +
-                        "- **Exit**"
-                    );
-                }
-            }
-            
-            // By calling next() you ensure that the next BotHandler is run.
             await next();
         });
     }
 
-    _formatSalesResults(sales, criteria) {
-        if (!sales || sales.length === 0) {
-            return `❓ Không tìm thấy dữ liệu cho **${criteria}**.`;
-        }
-        
-        let message = `📋 **KẾT QUẢ GẦN ĐÂY - ${criteria.toUpperCase()}:**\n\n`;
-        sales.forEach(s => {
-            message += `📅 Ngày: ${s.date}\n`;
-            message += `🏪 CH: ${s.store_name}\n`;
-            message += `🍾 SP: ${s.product_name}\n`;
-            message += `💰 Doanh thu: **$${formatCurrency(s.revenue)}**\n`;
-            if ('bottles' in s) {
-                message += `📦 Số chai: ${s.bottles}\n`;
+    // ─── STATE MACHINE DISPATCH ───────────────────────────────────────────────
+
+    async _dispatch(ctx, conv, text, text_lower) {
+        const state = conv.state || STATE_MAIN_MENU;
+
+        // ── MAIN MENU ──
+        if (state === STATE_MAIN_MENU) {
+            if (["1", "2", "3"].includes(text)) {
+                conv.menu_choice = text;
+                conv.state = STATE_DATE_FROM;
+                await this.convAccessor.set(ctx, conv);
+                await ctx.sendActivity(
+                    "📅 **Nhập tháng bắt đầu** (1–12)\n" +
+                    "hoặc gõ **skip** để bỏ qua bộ lọc tháng:"
+                );
+            } else {
+                await ctx.sendActivity(this._main_menu_message());
             }
-            message += "---\n";
+        }
+
+        // ── NHẬP THÁNG BẮT ĐẦU ──
+        else if (state === STATE_DATE_FROM) {
+            if (text_lower === "skip") {
+                conv.from_month = null;
+                conv.state = STATE_DATE_TO;
+                await this.convAccessor.set(ctx, conv);
+                await ctx.sendActivity(
+                    "📅 **Tháng kết thúc?** Nhập số tháng (1–12)\n" +
+                    "hoặc gõ **skip** để lấy toàn bộ năm 2022:"
+                );
+            } else {
+                const m = parseInt(text, 10);
+                if (!isNaN(m)) {
+                    if (m >= 1 && m <= 12) {
+                        conv.from_month = m;
+                        conv.state = STATE_DATE_TO;
+                        await this.convAccessor.set(ctx, conv);
+                        await ctx.sendActivity(
+                            `📅 Từ **${MONTH_NAMES[m]}**. Bây giờ nhập **tháng kết thúc** (1–12)\n` +
+                            "hoặc gõ **skip** để đến cuối năm:"
+                        );
+                    } else {
+                        await ctx.sendActivity("❌ Vui lòng nhập số tháng từ **1 đến 12**.");
+                    }
+                } else {
+                    await ctx.sendActivity("❌ Vui lòng nhập **số** tháng (ví dụ: 3 cho Tháng 3).");
+                }
+            }
+        }
+
+        // ── NHẬP THÁNG KẾT THÚC ──
+        else if (state === STATE_DATE_TO) {
+            if (text_lower === "skip") {
+                conv.to_month = null;
+            } else {
+                const m = parseInt(text, 10);
+                if (!isNaN(m)) {
+                    if (m >= 1 && m <= 12) {
+                        conv.to_month = m;
+                    } else {
+                        await ctx.sendActivity("❌ Vui lòng nhập số tháng từ **1 đến 12**.");
+                        return;
+                    }
+                } else {
+                    await ctx.sendActivity("❌ Vui lòng nhập **số** tháng (ví dụ: 6 cho Tháng 6).");
+                    return;
+                }
+            }
+
+            // Chuyển tháng → date string
+            const from_m = conv.from_month;
+            const to_m = conv.to_month;
+            
+            const formatPadded = (num) => num.toString().padStart(2, '0');
+            
+            conv.from_date = from_m ? `2022-${formatPadded(from_m)}-01` : null;
+            if (to_m) {
+                const last_day = getDaysInMonth(2022, to_m);
+                conv.to_date = `2022-${formatPadded(to_m)}-${formatPadded(last_day)}`;
+            } else {
+                conv.to_date = null;
+            }
+            await this.convAccessor.set(ctx, conv);
+
+            const choice = conv.menu_choice;
+            if (choice === "1") {
+                // Doanh thu → hiện list county
+                await this._show_county_list(ctx, conv);
+            } else if (choice === "2") {
+                // Top 5 bán nhiều nhất
+                await this._show_top5(ctx, conv);
+            } else if (choice === "3") {
+                // Top 5 bán ít nhất
+                await this._show_bottom5(ctx, conv);
+            }
+        }
+
+        // ── CHỌN COUNTY ──
+        else if (state === STATE_COUNTY_LIST) {
+            const counties = conv.counties || [];
+            const idx = parseInt(text, 10) - 1;
+            if (!isNaN(idx)) {
+                if (idx >= 0 && idx < counties.length) {
+                    conv.selected_county = counties[idx];
+                    await this.convAccessor.set(ctx, conv);
+                    await this._show_city_list(ctx, conv);
+                } else {
+                    await ctx.sendActivity("❌ Số không hợp lệ. " + this._retype_hint(counties));
+                }
+            } else {
+                await ctx.sendActivity("❌ Vui lòng nhập **số thứ tự** của county.");
+            }
+        }
+
+        // ── CHỌN CITY ──
+        else if (state === STATE_CITY_LIST) {
+            const cities = conv.cities || [];
+            // Option 0 = Exit (doanh thu toàn county)
+            if (text === "0") {
+                const county = conv.selected_county || "";
+                await this._show_county_revenue(ctx, conv, county);
+            } else {
+                const idx = parseInt(text, 10) - 1;
+                if (!isNaN(idx)) {
+                    if (idx >= 0 && idx < cities.length) {
+                        conv.selected_city = cities[idx];
+                        await this.convAccessor.set(ctx, conv);
+                        await this._show_store_list(ctx, conv);
+                    } else {
+                        await ctx.sendActivity("❌ Số không hợp lệ. " + this._retype_hint(cities, true));
+                    }
+                } else {
+                    await ctx.sendActivity("❌ Vui lòng nhập **số thứ tự** của thành phố hoặc **0** để xem doanh thu toàn county.");
+                }
+            }
+        }
+
+        // ── CHỌN STORE ──
+        else if (state === STATE_STORE_LIST) {
+            const stores = conv.stores || [];
+            const idx = parseInt(text, 10) - 1;
+            if (!isNaN(idx)) {
+                if (idx >= 0 && idx < stores.length) {
+                    const store = stores[idx];
+                    await this._show_store_revenue(ctx, conv, store);
+                } else {
+                    await ctx.sendActivity("❌ Số không hợp lệ. Vui lòng chọn lại.");
+                }
+            } else {
+                await ctx.sendActivity("❌ Vui lòng nhập **số thứ tự** của cửa hàng.");
+            }
+        }
+
+        // ── KẾT QUẢ CUỐI CÙNG ──
+        else if (state === STATE_END_RESULT) {
+            await ctx.sendActivity("👉 Gõ **menu** (hoặc **Menu**) để quay lại menu chính.");
+        }
+
+        else {
+            await ctx.sendActivity("👉 Gõ **Menu** để quay lại menu chính.");
+        }
+    }
+
+    // ─── HELPER: SHOW SCREENS ─────────────────────────────────────────────────
+
+    async _show_county_list(ctx, conv) {
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const counties = await this.dbHelper.getCounties(from_date, to_date);
+        conv.counties = counties;
+        conv.state = STATE_COUNTY_LIST;
+        await this.convAccessor.set(ctx, conv);
+
+        if (!counties || counties.length === 0) {
+            await ctx.sendActivity("❌ Không có dữ liệu county trong khoảng thời gian này.");
+            for (let key in conv) delete conv[key];
+            conv.state = STATE_MAIN_MENU;
+            await this.convAccessor.set(ctx, conv);
+            return;
+        }
+
+        const date_info = _fmt_date_range(from_date, to_date);
+        let msg = `🗺️ **DANH SÁCH COUNTY**${date_info}\n\n`;
+        msg += "Nhập **số thứ tự** để chọn county:\n\n";
+        counties.forEach((c, i) => {
+            msg += `  ${i + 1}. ${c}\n`;
         });
-        return message;
+        await ctx.sendActivity(msg);
+    }
+
+    async _show_city_list(ctx, conv) {
+        const county = conv.selected_county || "";
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const cities = await this.dbHelper.getCitiesByCounty(county, from_date, to_date);
+        conv.cities = cities;
+        conv.state = STATE_CITY_LIST;
+        await this.convAccessor.set(ctx, conv);
+
+        if (!cities || cities.length === 0) {
+            await ctx.sendActivity(`❌ Không có dữ liệu thành phố cho county **${county}**.`);
+            return;
+        }
+
+        const date_info = _fmt_date_range(from_date, to_date);
+        let msg = `🏙️ **THÀNH PHỐ TRONG QUẬN (HẠT) ${county.toUpperCase()}**${date_info}\n\n`;
+        msg += "Nhập **số thứ tự** để chọn thành phố:\n\n";
+        cities.forEach((c, i) => {
+            msg += `  ${i + 1}. ${c}\n`;
+        });
+        msg += "\n**0.** ⬅️ Xem doanh thu toàn bộ Quận (hạt) (bỏ qua chọn thành phố)";
+        await ctx.sendActivity(msg);
+    }
+
+    async _show_store_list(ctx, conv) {
+        const city = conv.selected_city || "";
+        const county = conv.selected_county || "";
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const stores = await this.dbHelper.getStoresByCity(city, county, from_date, to_date);
+        conv.stores = stores;
+        conv.state = STATE_STORE_LIST;
+        await this.convAccessor.set(ctx, conv);
+
+        if (!stores || stores.length === 0) {
+            await ctx.sendActivity(`❌ Không có cửa hàng nào tại **${city}**.`);
+            return;
+        }
+
+        const date_info = _fmt_date_range(from_date, to_date);
+        let msg = `🏪 **CỬA HÀNG TẠI ${city.toUpperCase()}**${date_info}\n\n`;
+        msg += "Nhập **số thứ tự** để xem doanh thu:\n\n";
+        stores.forEach((s, i) => {
+            msg += `  ${i + 1}. ${s.store_name} (ID: ${s.store_id})\n`;
+        });
+        await ctx.sendActivity(msg);
+    }
+
+    async _show_county_revenue(ctx, conv, county) {
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const data = await this.dbHelper.getRevenueByCounty(county, from_date, to_date);
+        const date_info = _fmt_date_range(from_date, to_date);
+
+        if (!data) {
+            await ctx.sendActivity(`❌ Không tìm thấy dữ liệu cho county **${county}**.`);
+        } else {
+            let msg = `📊 **DOANH THU QUẬN (HẠT) ${county.toUpperCase()}**${date_info}\n\n`;
+            msg += `💰 Tổng doanh thu: **$${formatCurrency(data.total_revenue)}**\n`;
+            msg += `📦 Số chai bán: **${formatNumber(data.total_bottles)}**\n`;
+            msg += `🏪 Số cửa hàng: **${formatNumber(data.total_stores)}**\n\n`;
+            msg += "Gõ **Menu** để quay lại menu chính.";
+            await ctx.sendActivity(msg);
+        }
+
+        conv.state = STATE_END_RESULT;
+        await this.convAccessor.set(ctx, conv);
+    }
+
+    async _show_store_revenue(ctx, conv, store) {
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const data = await this.dbHelper.getRevenueByStore(store.store_id, from_date, to_date);
+        const date_info = _fmt_date_range(from_date, to_date);
+
+        if (!data) {
+            await ctx.sendActivity(`❌ Không tìm thấy dữ liệu cho cửa hàng **${store.store_name}**.`);
+        } else {
+            let msg = `🏪 **DOANH THU CỬA HÀNG**${date_info}\n\n`;
+            msg += `🏷️ Tên: **${data.store_name}** (ID: ${store.store_id})\n`;
+            msg += `💰 Tổng doanh thu: **$${formatCurrency(data.total_revenue)}**\n`;
+            msg += `📦 Số chai bán: **${formatNumber(data.total_bottles)}**\n\n`;
+            msg += "Gõ **Menu** để quay lại menu chính.";
+            await ctx.sendActivity(msg);
+        }
+
+        conv.state = STATE_END_RESULT;
+        await this.convAccessor.set(ctx, conv);
+    }
+
+    async _show_top5(ctx, conv) {
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const products = await this.dbHelper.getTopProducts(5, from_date, to_date);
+        const date_info = _fmt_date_range(from_date, to_date);
+
+        if (!products || products.length === 0) {
+            await ctx.sendActivity("❌ Không có dữ liệu sản phẩm.");
+        } else {
+            let msg = `🏆 **TOP 5 RƯỢU BÁN NHIỀU NHẤT**${date_info}\n\n`;
+            products.forEach((p, i) => {
+                msg += `${i + 1}️⃣ **${p.name}**\n`;
+                msg += `   📦 Số chai: ${formatNumber(p.bottles)}\n`;
+                msg += `   💰 Doanh thu: $${formatCurrency(p.revenue)}\n\n`;
+            });
+            msg += "Gõ **Menu** để quay lại menu chính.";
+            await ctx.sendActivity(msg);
+        }
+
+        conv.state = STATE_END_RESULT;
+        await this.convAccessor.set(ctx, conv);
+    }
+
+    async _show_bottom5(ctx, conv) {
+        const from_date = conv.from_date;
+        const to_date = conv.to_date;
+        const products = await this.dbHelper.getBottomProducts(5, from_date, to_date);
+        const date_info = _fmt_date_range(from_date, to_date);
+
+        if (!products || products.length === 0) {
+            await ctx.sendActivity("❌ Không có dữ liệu sản phẩm.");
+        } else {
+            let msg = `📉 **TOP 5 RƯỢU BÁN ÍT NHẤT**${date_info}\n\n`;
+            products.forEach((p, i) => {
+                msg += `${i + 1}️⃣ **${p.name}**\n`;
+                msg += `   📦 Số chai: ${formatNumber(p.bottles)}\n`;
+                msg += `   💰 Doanh thu: $${formatCurrency(p.revenue)}\n\n`;
+            });
+            msg += "Gõ **Menu** để quay lại menu chính.";
+            await ctx.sendActivity(msg);
+        }
+
+        conv.state = STATE_END_RESULT;
+        await this.convAccessor.set(ctx, conv);
+    }
+
+    // ─── UI HELPERS ───────────────────────────────────────────────────────────
+
+    _main_menu_message() {
+        let msg  = "🤖 **XIN CHÀO! TÔI LÀ MENINBLACK BOT**\n\n";
+        msg += " _Báo cáo doanh thu bán rượu khu vực Iowa, Mỹ năm 2022_\n\n";
+        msg += "---\n\n";
+        msg += "**CHỌN CHỨC NĂNG:**\n\n";
+        msg += "1️⃣  **Doanh thu** — Xem doanh thu theo Quận (hạt) / Thành phố / Cửa hàng\n\n";
+        msg += "2️⃣  **Top 5 rượu bán nhiều nhất**\n\n";
+        msg += "3️⃣  **Top 5 rượu bán ít nhất**\n\n";
+        msg += "👉 Nhập **1**, **2** hoặc **3** để bắt đầu.\n\n";
+        msg += "_(Mỗi lựa chọn đều có thể lọc theo tháng)_";
+        return msg;
+    }
+
+    _retype_hint(items, with_exit = false) {
+        let hint = `Vui lòng nhập số từ 1 đến ${items.length}.`;
+        if (with_exit) {
+            hint += " Hoặc **0** để xem doanh thu toàn county.";
+        }
+        return hint;
     }
 
     async run(context) {
         await super.run(context);
-        // Save any state changes. The load happened during the execution of the Dialog.
+        // Save any state changes.
         await this.conversationState.saveChanges(context, false);
         await this.userState.saveChanges(context, false);
     }

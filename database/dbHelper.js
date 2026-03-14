@@ -1,24 +1,28 @@
+// Copyright (c) Microsoft Corporation. All rights reserved.
+// Licensed under the MIT License.
+
 const sql = require('mssql');
 const DefaultConfig = require('../config');
 
 class DatabaseHelper {
     constructor() {
         this.config = DefaultConfig.getSqlConfig();
+        // Giả sử config trả về đối tượng kết nối của mssql
     }
 
-    async getConnection() {
-        if (!this.pool) {
-            this.pool = await sql.connect(this.config);
-        }
-        return this.pool;
+    async get_connection() {
+        /** Tạo kết nối đến Azure SQL Database */
+        return await sql.connect(this.config);
     }
 
-    // ========== ADMIN FUNCTIONS ==========
-    async getSummaryStats() {
+    // ─── SUMMARY ───────────────────────────────────────────────────────────────
+
+    async get_summary_stats() {
+        /** Lấy doanh số tổng quát */
         try {
-            const pool = await this.getConnection();
+            const pool = await this.get_connection();
             const result = await pool.request().query(`
-                SELECT 
+                SELECT
                     SUM(sale_dollars) as TotalRevenue,
                     SUM(bottles_sold) as TotalBottles,
                     COUNT(DISTINCT store_id) as TotalStores
@@ -28,7 +32,7 @@ class DatabaseHelper {
             return {
                 total_revenue: row.TotalRevenue ? parseFloat(row.TotalRevenue) : 0,
                 total_bottles: row.TotalBottles ? parseInt(row.TotalBottles) : 0,
-                total_stores: row.TotalStores ? parseInt(row.TotalStores) : 0
+                total_stores: row.TotalStores ? parseInt(row.TotalStores) : 0,
             };
         } catch (error) {
             console.error(`Error getting summary stats: ${error}`);
@@ -36,19 +40,211 @@ class DatabaseHelper {
         }
     }
 
-    async getTopProducts(limit = 5) {
+    // ─── COUNTY / CITY / STORE DRILL-DOWN ──────────────────────────────────────
+
+    async get_counties(from_date = null, to_date = null) {
+        /** Lấy danh sách tất cả county (có thể lọc theo ngày) */
         try {
-            const pool = await this.getConnection();
-            const result = await pool.request().query(`
-                SELECT TOP ${limit} product_name, SUM(sale_dollars) as Revenue
+            const pool = await this.get_connection();
+            let query = `
+                SELECT DISTINCT county
                 FROM dbo.Iowa_Liquor_Sales2022
-                GROUP BY product_name
-                ORDER BY Revenue DESC
-            `);
-            
+                WHERE county IS NOT NULL AND county != ''
+            `;
+            const request = pool.request();
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " ORDER BY county";
+
+            const result = await request.query(query);
+            return result.recordset.map(row => row.county);
+        } catch (error) {
+            console.error(`Error getting counties: ${error}`);
+            return [];
+        }
+    }
+
+    async get_cities_by_county(county, from_date = null, to_date = null) {
+        /** Lấy danh sách thành phố trong một county */
+        try {
+            const pool = await this.get_connection();
+            let query = `
+                SELECT DISTINCT city
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE county = @county AND city IS NOT NULL AND city != ''
+            `;
+            const request = pool.request();
+            request.input('county', sql.VarChar, county);
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " ORDER BY city";
+
+            const result = await request.query(query);
+            return result.recordset.map(row => row.city);
+        } catch (error) {
+            console.error(`Error getting cities: ${error}`);
+            return [];
+        }
+    }
+
+    async get_stores_by_city(city, county, from_date = null, to_date = null) {
+        /** Lấy danh sách cửa hàng trong một city */
+        try {
+            const pool = await this.get_connection();
+            let query = `
+                SELECT DISTINCT store_id, store_name
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE city = @city AND county = @county
+                  AND store_id IS NOT NULL AND store_name IS NOT NULL
+            `;
+            const request = pool.request();
+            request.input('city', sql.VarChar, city);
+            request.input('county', sql.VarChar, county);
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " ORDER BY store_name";
+
+            const result = await request.query(query);
+            return result.recordset.map(row => ({
+                store_id: row.store_id,
+                store_name: row.store_name
+            }));
+        } catch (error) {
+            console.error(`Error getting stores: ${error}`);
+            return [];
+        }
+    }
+
+    async get_revenue_by_store(store_id, from_date = null, to_date = null) {
+        /** Tổng doanh thu của một cửa hàng */
+        try {
+            const pool = await this.get_connection();
+            let query = `
+                SELECT store_name,
+                       SUM(sale_dollars) as TotalRevenue,
+                       SUM(bottles_sold) as TotalBottles
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE store_id = @store_id
+            `;
+            const request = pool.request();
+            request.input('store_id', sql.VarChar, store_id);
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " GROUP BY store_name";
+
+            const result = await request.query(query);
+            const row = result.recordset[0];
+            if (row) {
+                return {
+                    store_name: row.store_name,
+                    total_revenue: row.TotalRevenue ? parseFloat(row.TotalRevenue) : 0,
+                    total_bottles: row.TotalBottles ? parseInt(row.TotalBottles) : 0,
+                };
+            }
+            return {};
+        } catch (error) {
+            console.error(`Error getting store revenue: ${error}`);
+            return {};
+        }
+    }
+
+    async get_revenue_by_county(county, from_date = null, to_date = null) {
+        /** Tổng doanh thu của một county */
+        try {
+            const pool = await this.get_connection();
+            let query = `
+                SELECT SUM(sale_dollars) as TotalRevenue,
+                       SUM(bottles_sold) as TotalBottles,
+                       COUNT(DISTINCT store_id) as TotalStores
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE county = @county
+            `;
+            const request = pool.request();
+            request.input('county', sql.VarChar, county);
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+
+            const result = await request.query(query);
+            const row = result.recordset[0];
+            if (row) {
+                return {
+                    total_revenue: row.TotalRevenue ? parseFloat(row.TotalRevenue) : 0,
+                    total_bottles: row.TotalBottles ? parseInt(row.TotalBottles) : 0,
+                    total_stores: row.TotalStores ? parseInt(row.TotalStores) : 0,
+                };
+            }
+            return {};
+        } catch (error) {
+            console.error(`Error getting county revenue: ${error}`);
+            return {};
+        }
+    }
+
+    // ─── PRODUCT RANKINGS ──────────────────────────────────────────────────────
+
+    async get_top_products(limit = 5, from_date = null, to_date = null) {
+        /** Top N sản phẩm bán nhiều nhất (theo bottles_sold), nếu bằng số chai thì lọc doanh thu thấp -> cao */
+        try {
+            const pool = await this.get_connection();
+            let query = `
+                SELECT TOP ${parseInt(limit)} product_name,
+                       SUM(bottles_sold) as TotalBottles,
+                       SUM(sale_dollars) as TotalRevenue
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE 1=1
+            `;
+            const request = pool.request();
+
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " GROUP BY product_name ORDER BY TotalBottles DESC, TotalRevenue DESC";
+
+            const result = await request.query(query);
             return result.recordset.map(row => ({
                 name: row.product_name,
-                revenue: row.Revenue ? parseFloat(row.Revenue) : 0
+                bottles: row.TotalBottles ? parseInt(row.TotalBottles) : 0,
+                revenue: row.TotalRevenue ? parseFloat(row.TotalRevenue) : 0,
             }));
         } catch (error) {
             console.error(`Error getting top products: ${error}`);
@@ -56,52 +252,37 @@ class DatabaseHelper {
         }
     }
 
-    // ========== USER FUNCTIONS ==========
-    async getSalesByStore(storeId) {
+    async get_bottom_products(limit = 5, from_date = null, to_date = null) {
+        /** Top N sản phẩm bán ít nhất (theo bottles_sold), nếu bằng số chai thì lọc doanh thu thấp -> cao */
         try {
-            const pool = await this.getConnection();
-            const result = await pool.request()
-                .input('store_id', sql.NVarChar, storeId)
-                .query(`
-                    SELECT TOP 10 date, store_name, product_name, sale_dollars, bottles_sold
-                    FROM dbo.Iowa_Liquor_Sales2022
-                    WHERE store_id = @store_id
-                    ORDER BY date DESC
-                `);
-            
-            return result.recordset.map(row => ({
-                date: row.date ? new Date(row.date).toLocaleDateString('vi-VN') : "N/A",
-                store_name: row.store_name,
-                product_name: row.product_name,
-                revenue: row.sale_dollars ? parseFloat(row.sale_dollars) : 0,
-                bottles: row.bottles_sold ? parseInt(row.bottles_sold) : 0
-            }));
-        } catch (error) {
-            console.error(`Error getting store sales: ${error}`);
-            return [];
-        }
-    }
+            const pool = await this.get_connection();
+            let query = `
+                SELECT TOP ${parseInt(limit)} product_name,
+                       SUM(bottles_sold) as TotalBottles,
+                       SUM(sale_dollars) as TotalRevenue
+                FROM dbo.Iowa_Liquor_Sales2022
+                WHERE 1=1
+            `;
+            const request = pool.request();
 
-    async getSalesByCity(city) {
-        try {
-            const pool = await this.getConnection();
-            const result = await pool.request()
-                .input('city', sql.NVarChar, `%${city}%`)
-                .query(`
-                    SELECT TOP 10 date, store_name, product_name, sale_dollars
-                    FROM dbo.Iowa_Liquor_Sales2022
-                    WHERE city LIKE @city
-                    ORDER BY date DESC
-                `);
-            
+            if (from_date) {
+                query += " AND date >= @from_date";
+                request.input('from_date', sql.Date, new Date(from_date));
+            }
+            if (to_date) {
+                query += " AND date <= @to_date";
+                request.input('to_date', sql.Date, new Date(to_date));
+            }
+            query += " GROUP BY product_name ORDER BY TotalBottles ASC, TotalRevenue ASC";
+
+            const result = await request.query(query);
             return result.recordset.map(row => ({
-                date: row.date ? new Date(row.date).toLocaleDateString('vi-VN') : "N/A",
-                store_name: row.store_name,
-                product_name: row.product_name,
-                revenue: row.sale_dollars ? parseFloat(row.sale_dollars) : 0
+                name: row.product_name,
+                bottles: row.TotalBottles ? parseInt(row.TotalBottles) : 0,
+                revenue: row.TotalRevenue ? parseFloat(row.TotalRevenue) : 0,
             }));
         } catch (error) {
-            console.error(`Error getting city sales: ${error}`);
+            console.error(`Error getting bottom products: ${error}`);
             return [];
         }
     }
