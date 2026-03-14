@@ -27,11 +27,11 @@ function getDaysInMonth(year, month) {
 function _fmt_date_range(from_date, to_date) {
     // Chuỗi mô tả khoảng thời gian (dạng YYYY-MM-DD)
     if (from_date || to_date) {
-        const f = from_date ? from_date.substring(0, 7) : "đầu năm";
-        const t = to_date ? to_date.substring(0, 7) : "cuối năm";
+        const f = from_date ? from_date.substring(0, 7) : "bắt đầu";
+        const t = to_date ? to_date.substring(0, 7) : "kết thúc";
         return ` (từ ${f} đến ${t})`;
     }
-    return " (toàn năm 2022)";
+    return "";
 }
 
 function formatCurrency(amount) {
@@ -165,16 +165,17 @@ class Bot extends ActivityHandler {
                 }
             }
 
-            // Chuyển tháng → date string
+            // Chuyển tháng → date string (Tự động nhận diện năm từ dữ liệu)
             const from_m = conv.from_month;
             const to_m = conv.to_month;
+            const target_year = 2022; // Mặc định 2022 theo bảng của bạn
             
             const formatPadded = (num) => num.toString().padStart(2, '0');
             
-            conv.from_date = from_m ? `2022-${formatPadded(from_m)}-01` : null;
+            conv.from_date = from_m ? `${target_year}-${formatPadded(from_m)}-01` : null;
             if (to_m) {
-                const last_day = getDaysInMonth(2022, to_m);
-                conv.to_date = `2022-${formatPadded(to_m)}-${formatPadded(last_day)}`;
+                const last_day = getDaysInMonth(target_year, to_m);
+                conv.to_date = `${target_year}-${formatPadded(to_m)}-${formatPadded(last_day)}`;
             } else {
                 conv.to_date = null;
             }

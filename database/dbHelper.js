@@ -12,7 +12,12 @@ class DatabaseHelper {
 
     async get_connection() {
         /** Tạo kết nối đến Azure SQL Database */
-        return await sql.connect(this.config);
+        try {
+            return await sql.connect(this.config);
+        } catch (err) {
+            console.error("CRITICAL SQL CONNECTION ERROR:", err.message);
+            throw err;
+        }
     }
     async getConnection() { return this.get_connection(); }
 
