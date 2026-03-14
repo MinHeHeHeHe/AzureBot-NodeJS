@@ -13,11 +13,11 @@ class DefaultConfig {
     static APP_TYPE_OLD = process.env.MicrosoftAppType || "SingleTenant";
     static APP_TENANTID_OLD = process.env.MicrosoftAppTenantId || "";
 
-    // Azure SQL Database Configuration
-    static SQL_SERVER = process.env.SQL_SERVER || "your-server.database.windows.net";
-    static SQL_DATABASE = process.env.SQL_DATABASE || "your-database";
-    static SQL_USERNAME = process.env.SQL_USERNAME || "your-username";
-    static SQL_PASSWORD = process.env.SQL_PASSWORD || "your-password";
+    // Azure SQL Database Configuration (Sử dụng getter để đảm bảo đọc đúng biến môi trường mới nhất)
+    static get SQL_SERVER() { return process.env.SQL_SERVER || "your-server.database.windows.net"; }
+    static get SQL_DATABASE() { return process.env.SQL_DATABASE || "your-database"; }
+    static get SQL_USERNAME() { return process.env.SQL_USERNAME || "your-username"; }
+    static get SQL_PASSWORD() { return process.env.SQL_PASSWORD || "your-password"; }
 
     static getSqlConfig() {
         return {
@@ -28,7 +28,8 @@ class DefaultConfig {
             options: {
                 encrypt: true,
                 trustServerCertificate: false,
-                connectionTimeout: 30000
+                connectionTimeout: 30000,
+                requestTimeout: 60000 // Tăng thời gian chờ lên 60s
             }
         };
     }
