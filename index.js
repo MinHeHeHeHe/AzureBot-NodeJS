@@ -18,7 +18,7 @@ const CONFIG = DefaultConfig;
 
 // Create adapter.
 // See https://aka.ms/about-bot-adapter to learn more about how bots work.
-const ADAPTER = new CloudAdapter(new ConfigurationBotFrameworkAuthentication(CONFIG));
+const ADAPTER = new CloudAdapter(new ConfigurationBotFrameworkAuthentication(process.env));
 
 // Catch-all for errors.
 async function on_error(context, error) {
