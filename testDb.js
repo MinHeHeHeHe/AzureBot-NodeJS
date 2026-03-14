@@ -11,13 +11,13 @@ async function runTest() {
         console.log("✅ Connection successful!");
         
         // Test 1: Count records in the table
-        let result = await pool.request().query("SELECT COUNT(*) as count FROM dbo.Iowa_Liquor_Sales2022");
+        let result = await pool.request().query("SELECT COUNT(*) as count FROM dbo.Final_Iowa_Liquor_Sales2022");
         const count = result.recordset[0].count;
-        console.log(`✅ Found ${count.toLocaleString('en-US')} sales records in dbo.Iowa_Liquor_Sales2022`);
+        console.log(`✅ Found ${count.toLocaleString('en-US')} sales records in dbo.Final_Iowa_Liquor_Sales2022`);
         
         // Test 2: Peek at the first 3 records
         console.log("\n🔍 First 3 records:");
-        result = await pool.request().query("SELECT TOP 3 store_name, city, sale_dollars FROM dbo.Iowa_Liquor_Sales2022");
+        result = await pool.request().query("SELECT TOP 3 store_name, city, sale_dollars FROM dbo.Final_Iowa_Liquor_Sales2022");
         result.recordset.forEach(row => {
             const sale = row.sale_dollars ? parseFloat(row.sale_dollars) : 0;
             console.log(` - Store: ${row.store_name}, City: ${row.city}, Sale: $${sale.toLocaleString('en-US', { minimumFractionDigits: 2 })}`);

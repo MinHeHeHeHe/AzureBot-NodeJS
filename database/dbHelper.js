@@ -27,7 +27,7 @@ class DatabaseHelper {
                     SUM(sale_dollars) as TotalRevenue,
                     SUM(bottles_sold) as TotalBottles,
                     COUNT(DISTINCT store_id) as TotalStores
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
             `);
             const row = result.recordset[0];
             return {
@@ -50,7 +50,7 @@ class DatabaseHelper {
             const pool = await this.get_connection();
             let query = `
                 SELECT DISTINCT county
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE county IS NOT NULL AND county != ''
             `;
             const request = pool.request();
@@ -80,7 +80,7 @@ class DatabaseHelper {
             const pool = await this.get_connection();
             let query = `
                 SELECT DISTINCT city
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE county = @county AND city IS NOT NULL AND city != ''
             `;
             const request = pool.request();
@@ -111,7 +111,7 @@ class DatabaseHelper {
             const pool = await this.get_connection();
             let query = `
                 SELECT DISTINCT store_id, store_name
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE city = @city AND county = @county
                   AND store_id IS NOT NULL AND store_name IS NOT NULL
             `;
@@ -149,7 +149,7 @@ class DatabaseHelper {
                 SELECT store_name,
                        SUM(sale_dollars) as TotalRevenue,
                        SUM(bottles_sold) as TotalBottles
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE store_id = @store_id
             `;
             const request = pool.request();
@@ -190,7 +190,7 @@ class DatabaseHelper {
                 SELECT SUM(sale_dollars) as TotalRevenue,
                        SUM(bottles_sold) as TotalBottles,
                        COUNT(DISTINCT store_id) as TotalStores
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE county = @county
             `;
             const request = pool.request();
@@ -232,7 +232,7 @@ class DatabaseHelper {
                 SELECT TOP ${parseInt(limit)} product_name,
                        SUM(bottles_sold) as TotalBottles,
                        SUM(sale_dollars) as TotalRevenue
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE 1=1
             `;
             const request = pool.request();
@@ -268,7 +268,7 @@ class DatabaseHelper {
                 SELECT TOP ${parseInt(limit)} product_name,
                        SUM(bottles_sold) as TotalBottles,
                        SUM(sale_dollars) as TotalRevenue
-                FROM dbo.Iowa_Liquor_Sales2022
+                FROM dbo.Final_Iowa_Liquor_Sales2022
                 WHERE 1=1
             `;
             const request = pool.request();
