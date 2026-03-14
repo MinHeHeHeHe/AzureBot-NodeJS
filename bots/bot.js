@@ -81,6 +81,8 @@ class Bot extends ActivityHandler {
                 conv.state = STATE_MAIN_MENU;
                 await this.convAccessor.set(context, conv);
                 await context.sendActivity(this._main_menu_message());
+            } else if (text_lower === "debug") {
+                await this._show_debug_info(context);
             } else {
                 const conv = await this.convAccessor.get(context, {});
                 if (!conv.state) {
@@ -451,6 +453,25 @@ class Bot extends ActivityHandler {
         // Save any state changes.
         await this.conversationState.saveChanges(context, false);
         await this.userState.saveChanges(context, false);
+    }
+
+    async _show_debug_info(ctx) {
+        await ctx.sendActivity("🔍 **ĐANG KIỂM TRA HỆ THỐNG...**");
+        const info = await this.dbHelper.get_data_info();
+        
+        if (info.error) {
+            let msg = "❌ **LỖI KẾT NỐI DATABASE:**\n\n";
+            msg += `> ${info.error}\n\n`;
+            msg += "👉 *Gợi ý: Kiểm tra Firewall của Azure SQL và các biến SQL_SERVER, SQL_PASSWORD trên Azure Portal.*";
+            await ctx.sendActivity(msg);
+        } else {
+            let msg = "✅ **KẾT NỐI DATABASE THÀNH CÔNG!**\n\n";
+            msg += `📊 Tổng số dòng: **${formatNumber(info.total_rows)}**\n`;
+            msg += `📅 Ngày sớm nhất: **${info.min_date}**\n`;
+            msg += `📅 Ngày muộn nhất: **${info.max_date}**\n\n`;
+            msg += "👉 *Lưu ý: Nếu ngày không nằm trong năm 2022, Bot sẽ không lọc được theo tháng.*";
+            await ctx.sendActivity(msg);
+        }
     }
 }
 
