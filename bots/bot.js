@@ -81,8 +81,6 @@ class Bot extends ActivityHandler {
                 conv.state = STATE_MAIN_MENU;
                 await this.convAccessor.set(context, conv);
                 await context.sendActivity(this._main_menu_message());
-            } else if (text_lower === "debug") {
-                await this._show_debug_info(context);
             } else {
                 const conv = await this.convAccessor.get(context, {});
                 if (!conv.state) {
@@ -455,35 +453,6 @@ class Bot extends ActivityHandler {
         await this.userState.saveChanges(context, false);
     }
 
-    async _show_debug_info(ctx) {
-        await ctx.sendActivity("🔍 **ĐANG KIỂM TRA HỆ THỐNG...**");
-        
-        try {
-            const config = require('../config').getSqlConfig();
-            const redactedServer = config.server;
-            await ctx.sendActivity(`📡 Đang kết nối tới: **${redactedServer}**...`);
-            
-            const start = Date.now();
-            const info = await this.dbHelper.get_data_info();
-            const duration = ((Date.now() - start) / 1000).toFixed(1);
-
-            if (info.error) {
-                let msg = "❌ **LỖI KẾT NỐI DATABASE:**\n\n";
-                msg += `> ${info.error}\n\n`;
-                msg += "👉 **Gợi ý:** Nếu lỗi là 'Timeout', có thể do Firewall hoặc Server chưa phản hồi. Dù bạn đã tích 'Allow Azure services', đôi khi cần chờ vài phút để có hiệu lực hoặc kiểm tra lại tên Server.";
-                await ctx.sendActivity(msg);
-            } else {
-                let msg = "✅ **KẾT NỐI DATABASE THÀNH CÔNG!**\n\n";
-                msg += `📊 Tổng số dòng: **${formatNumber(info.total_rows)}**\n`;
-                msg += `📅 Khoảng ngày: **${info.min_date}** đến **${info.max_date}**\n`;
-                msg += `⏱️ Thời gian phản hồi: **${duration} giây**\n\n`;
-                msg += "👉 *Dữ liệu đã sẵn sàng phục vụ!*";
-                await ctx.sendActivity(msg);
-            }
-        } catch (err) {
-            await ctx.sendActivity(`❌ Lỗi nghiêm trọng: ${err.message}`);
-        }
-    }
 }
 
 module.exports.Bot = Bot;

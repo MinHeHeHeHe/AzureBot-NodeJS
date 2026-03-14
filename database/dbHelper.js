@@ -301,22 +301,6 @@ class DatabaseHelper {
     }
     async getBottomProducts(l, f, t) { return this.get_bottom_products(l, f, t); }
 
-    async get_data_info() {
-        /** Diagnostic function to see what's in the table */
-        try {
-            const pool = await this.get_connection();
-            const result = await pool.request().query(`
-                SELECT 
-                    MIN(date) as min_date, 
-                    MAX(date) as max_date, 
-                    COUNT(*) as total_rows 
-                FROM dbo.Final_Iowa_Liquor_Sales2022
-            `);
-            return result.recordset[0];
-        } catch (error) {
-            return { error: error.message };
-        }
-    }
 }
 
 module.exports = DatabaseHelper;
