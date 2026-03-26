@@ -1,4 +1,4 @@
-# 🤖 Iowa Liquor Sales Bot — Azure Bot Service
+# Iowa Liquor Sales Bot — Azure Bot Service
 
 > **Seminar:** Creating and Deploying a Bot to Azure Bot Service  
 > **Lớp:** Điện toán đám mây - IS402  
@@ -10,7 +10,7 @@
 
 ---
 
-## 📝 Giới thiệu
+## Giới thiệu
 
 **Iowa Liquor Sales Bot** là một chatbot thông minh được xây dựng trên nền tảng **Azure Bot Service** sử dụng **Node.js**, giúp người dùng tra cứu và phân tích dữ liệu doanh thu bán rượu tại bang Iowa, Mỹ, năm 2022.
 
@@ -18,7 +18,7 @@ Dữ liệu được lưu trữ trong **Azure SQL Database** với hơn **2.5 tr
 
 ---
 
-## 🏗️ Kiến trúc hệ thống
+## Kiến trúc hệ thống
 
 ```
 Người dùng 
@@ -32,25 +32,25 @@ Azure SQL Database (Iowa Liquor Sales 2022)
 
 ---
 
-## ✨ Chức năng chính
+## Chức năng chính
 
-### 1. 💰 Xem doanh thu theo khu vực
+### 1. Xem doanh thu theo khu vực
 Tra cứu tổng doanh thu bán rượu theo **Quận (County)** → **Thành phố (City)** → **Cửa hàng (Store)**.
 
 - Hỗ trợ bộ lọc theo **khoảng thời gian** (tháng bắt đầu / tháng kết thúc, năm 2022).
 - Có thể bỏ qua bộ lọc thời gian để xem toàn bộ dữ liệu.
 
-### 2. 🏆 Top 5 rượu bán nhiều nhất
+### 2. Top 5 rượu bán nhiều nhất
 Hiển thị danh sách 5 sản phẩm rượu bán được nhiều chai nhất trong khoảng thời gian đã chọn.
 
-### 3. 📉 Top 5 rượu bán ít nhất
+### 3. Top 5 rượu bán ít nhất
 Hiển thị danh sách 5 sản phẩm rượu bán được ít chai nhất trong khoảng thời gian đã chọn.
 
 > **Lưu ý:** Mỗi chức năng đều hỗ trợ lọc theo tháng (có thể bỏ qua).
 
 ---
 
-## 🗃️ Cấu trúc dự án
+## Cấu trúc dự án
 
 ```
 AzureBot-NodeJS/
@@ -66,7 +66,7 @@ AzureBot-NodeJS/
 
 ---
 
-## ⚙️ Cài đặt & Chạy thử (Locally)
+## Cài đặt & Chạy thử (Locally)
 
 ### Yêu cầu
 - Node.js >= 18
@@ -96,7 +96,7 @@ npm start
 
 ---
 
-## ☁️ Triển khai lên Azure
+## Triển khai lên Azure
 
 ```bash
 # Đẩy code lên Azure App Service
@@ -105,7 +105,7 @@ git push azure main:master
 
 ---
 
-## 🛠️ Công nghệ sử dụng
+## Công nghệ sử dụng
 
 | Công nghệ | Mục đích |
 |-----------|----------|
